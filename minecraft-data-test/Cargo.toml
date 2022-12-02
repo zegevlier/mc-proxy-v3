@@ -1,0 +1,11 @@
+[package]
+edition = "2021"
+name = "minecraft-data-test"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.66"
+convert_case = "0.6.0"
+minecraft-data-rs = {git = "https://github.com/zegevlier/minecraft-data-rs.git", branch = "main"}
