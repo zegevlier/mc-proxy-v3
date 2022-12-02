@@ -1,8 +1,11 @@
+#![warn(clippy::nursery)]
+// #![warn(clippy::unwrap_used, clippy::expect_used)]
+
 use anyhow::Result;
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::packet::{Packet, PacketReaderWriter};
+use crate::packet::{Packet, ReaderWriter};
 
 mod packet;
 pub(crate) mod utils;
@@ -20,24 +23,36 @@ async fn main() -> Result<()> {
     status_packet.set_packet_id(0x00);
 
     let thread = tokio::spawn(async move {
-        let mut stream = tokio::net::TcpStream::connect("127.0.0.1:25565")
+        let mut stream = tokio::net::TcpStream::connect("play.schoolrp.net:25565")
             .await
             .unwrap();
         let handshake_bytes = handshake_packet.get_packet_bytes(-1).unwrap();
         let status_bytes = status_packet.get_packet_bytes(-1).unwrap();
 
-        stream.write_all(&handshake_bytes[..]).await.unwrap();
-        stream.write_all(&status_bytes[..]).await.unwrap();
+        let mut buf = BytesMut::new();
+        buf.put(handshake_bytes);
+        buf.put(status_bytes);
 
-        let mut returned_bytes = vec![0; 1024];
+        stream.write_all(&buf).await.unwrap();
 
-        let returned_amount = stream.read(&mut returned_bytes).await.unwrap();
+        let mut bytes = BytesMut::new();
+        loop {
+            let read = stream.read_buf(&mut bytes).await.unwrap();
+            if read == 0 {
+                break;
+            }
+            let mut bytes_read = bytes.clone();
+            if let Ok(mut packet) = Packet::read_from_bytes(&mut bytes_read) {
+                println!("{}", packet.read_string().unwrap());
+                break;
+            }
+        }
 
-        let mut bytes = BytesMut::with_capacity(returned_amount);
-        bytes.put(&returned_bytes[..returned_amount]);
-        let mut returned_packet = Packet::read_from_bytes(&mut bytes).unwrap();
+        // println!("Returned amount: {}", bytes.len());
 
-        println!("{}", returned_packet.read_string().unwrap());
+        // let mut returned_packet = Packet::read_from_bytes(&mut bytes).unwrap();
+
+        // println!("{}", returned_packet.read_string().unwrap());
     });
 
     thread.await.unwrap();

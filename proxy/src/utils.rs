@@ -1,6 +1,6 @@
 use anyhow::bail;
 
-pub(crate) fn get_varint_size(value: i32) -> anyhow::Result<i32> {
+pub fn get_varint_size(value: i32) -> anyhow::Result<i32> {
     if value < 0 {
         bail!("Value must be positive");
     } else if value < 0x80 {

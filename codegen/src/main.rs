@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use serde::Deserialize;
-use serde_json::{ser::Formatter, Value};
+use serde_json::Value;
 
 use std::{collections::HashMap, fmt::Display};
 
@@ -43,6 +43,8 @@ struct Instruction {
     #[serde(rename = "type", default)]
     instruction_type: OptionalInstructionType,
     instructions: Option<Vec<Instruction>>,
+    var: Option<String>,
+    value: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,7 +147,23 @@ impl Default for OptionalInstructionType {
 struct Class {
     name: String,
     obfuscated_name: String,
-    fields: HashMap<String, String>,
+    fields: HashMap<String, Field>,
+    methods: HashMap<String, Method>,
+}
+
+#[derive(Debug)]
+struct Field {
+    name: String,
+    field_type: String,
+    obfuscated_name: String,
+}
+
+#[derive(Debug)]
+struct Method {
+    name: String,
+    obfuscated_name: String,
+    parameters: String,
+    return_type: String,
 }
 
 fn main() {
@@ -163,47 +181,75 @@ fn main() {
         .unwrap();
     let mappings_u = std::fs::read_to_string("mappings.txt").unwrap();
 
-    let mut mappings: HashMap<String, Class> = HashMap::new();
-    let mut current_class = Class {
-        name: String::new(),
-        obfuscated_name: String::new(),
-        fields: HashMap::new(),
-    };
-    for line in mappings_u
-        .lines()
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-    {
-        if line.starts_with("    ") {
-            let mut split = line.split(" -> ");
-            let first_part = split.next().unwrap();
-            if first_part
-                .strip_prefix("    ")
-                .unwrap()
-                .split(' ')
-                .next()
-                .unwrap()
-                .contains(':')
-            {
-                continue;
-            }
-            let real = first_part.split(' ').last().unwrap();
-            let obfus = split.next().unwrap();
-            current_class
-                .fields
-                .insert(obfus.to_string(), real.to_string());
-        } else {
-            if !current_class.name.is_empty() {
-                mappings.insert(current_class.obfuscated_name.clone(), current_class);
-            }
-            let mut split = line.split(" -> ");
-            let real = split.next().unwrap();
-            let obfus = split.next().unwrap().strip_suffix(':').unwrap();
-            current_class = Class {
-                name: real.to_string(),
-                obfuscated_name: obfus.to_string(),
-                fields: HashMap::new(),
-            };
+    let mut classes = Vec::new();
+
+    let mapping = proguard::ProguardMapping::new(mappings_u.as_bytes());
+    for record in mapping.iter() {
+        match record {
+            Ok(r) => match r {
+                proguard::ProguardRecord::Header { key: _, value: _ } => {}
+                proguard::ProguardRecord::Class {
+                    original,
+                    obfuscated,
+                } => {
+                    // println!("\t{} -> {}", original, obfuscated);
+                    classes.push(Class {
+                        name: original.to_string(),
+                        obfuscated_name: obfuscated.to_string(),
+                        fields: HashMap::new(),
+                        methods: HashMap::new(),
+                    });
+                }
+                proguard::ProguardRecord::Field {
+                    ty,
+                    original,
+                    obfuscated,
+                } => {
+                    // println!("\t\t{} {} -> {}", ty, original, obfuscated);
+                    let idx = classes.len() - 1;
+                    let class = classes.get_mut(idx).unwrap();
+                    class.fields.insert(
+                        obfuscated.to_string(),
+                        Field {
+                            name: original.to_string(),
+                            field_type: ty.to_string(),
+                            obfuscated_name: obfuscated.to_string(),
+                        },
+                    );
+                }
+                proguard::ProguardRecord::Method {
+                    ty,
+                    original,
+                    obfuscated,
+                    arguments,
+                    original_class: _,
+                    line_mapping: _,
+                } => {
+                    // println!(
+                    //     "\t\t{} {} {} {:?} -> {}",
+                    //     ty, original, arguments, original_class, obfuscated
+                    // );
+
+                    let idx = classes.len() - 1;
+                    let class = classes.get_mut(idx).unwrap();
+                    class.methods.insert(
+                        obfuscated.to_string(),
+                        Method {
+                            name: original.to_string(),
+                            obfuscated_name: obfuscated.to_string(),
+                            parameters: arguments.to_string(),
+                            return_type: ty.to_string(),
+                        },
+                    );
+                }
+            },
+            Err(_) => todo!(),
         }
+    }
+
+    let mut mappings = HashMap::new();
+    for class in classes {
+        mappings.insert(class.obfuscated_name.clone(), class);
     }
 
     let packets = packet_data
@@ -215,39 +261,117 @@ fn main() {
         .unwrap();
     for (_packet_id, packet) in packets.iter() {
         let packet: Packet = serde_json::from_value(packet.to_owned()).unwrap();
-        let class = packet.class;
-        let class = mappings
-            .get(class.strip_suffix(".class").unwrap())
-            .unwrap()
-            .name
-            .split('.')
-            .last()
-            .unwrap();
+        let class_unmapped = packet.class.strip_suffix(".class").unwrap();
+        let class = mappings.get(class_unmapped).unwrap();
+        gen_packet_code(&packet, class);
 
-        for instruction in packet.instructions {
-            print_instruction(class, &instruction);
-        }
+        // println!("{}", class.name);
+
+        // for instruction in packet.instructions {
+        //     // print_instruction(class, &instruction);
+        //     if let Some(instruction_field) = instruction.field {
+        //         if let Some(remapped_instruction) = class.fields.get(&instruction_field) {
+        //             println!("\t{:?}", remapped_instruction);
+        //         } else {
+        //             println!("\t{:?}", instruction_field);
+        //         }
+        //     }
+        // }
     }
 }
 
-fn print_instruction(prefix: &str, instruction: &Instruction) {
-    match &instruction.instruction_type {
-        OptionalInstructionType::Some(instruction_type) => {
-            println!("{} -> {:?}", prefix, instruction_type);
-        }
-        OptionalInstructionType::Other(thing) => {
-            println!("{} -> {}", prefix, thing);
-        }
-        OptionalInstructionType::None => {
-            println!("{} -> None", prefix);
-        }
-    }
-    if let Some(instructions) = instruction.instructions.as_ref() {
-        for instruction in instructions {
-            print_instruction(
-                &format!("{}:{:?}", prefix, instruction.instruction_type),
-                instruction,
-            );
+fn gen_packet_code(packet: &Packet, class: &Class) {
+    println!("#[derive(Packet)]");
+    println!("pub struct {} {{", class.name.split('.').last().unwrap());
+
+    print_instruction_code(&packet.instructions, class, 1);
+
+    println!("}}");
+}
+
+fn print_instruction_code(instructions: &Vec<Instruction>, class: &Class, tab_count: usize) {
+    for instruction in instructions {
+        match instruction.operation {
+            Operation::Write => {
+                match class.fields.get(instruction.field.as_ref().unwrap()) {
+                    Some(field) => {
+                        println!(
+                            "{}pub {}: {},",
+                            "\t".repeat(tab_count),
+                            field.name,
+                            instruction.instruction_type
+                        );
+                    }
+                    None => {
+                        println!(
+                            "{}//TODO {}: {},",
+                            "\t".repeat(tab_count),
+                            instruction.field.as_ref().unwrap(),
+                            instruction.instruction_type
+                        );
+                    }
+                };
+            }
+            Operation::Store => {
+                match class.fields.get(instruction.var.as_ref().unwrap()) {
+                    Some(field) => {
+                        println!(
+                            "{}let {}: {} = {};",
+                            "\t".repeat(tab_count),
+                            field.name,
+                            instruction.instruction_type,
+                            instruction.value.as_ref().unwrap()
+                        );
+                    }
+                    None => {
+                        println!(
+                            "{}//TODO let {}: {} = {};",
+                            "\t".repeat(tab_count),
+                            instruction.var.as_ref().unwrap(),
+                            instruction.instruction_type,
+                            instruction.value.as_ref().unwrap()
+                        );
+                    }
+                };
+            }
+            Operation::If => {
+                println!(
+                    "{}if {} {{",
+                    "\t".repeat(tab_count),
+                    instruction.condition.as_ref().unwrap()
+                );
+                print_instruction_code(
+                    instruction.instructions.as_ref().unwrap(),
+                    class,
+                    tab_count + 1,
+                );
+                println!("{}}}", "\t".repeat(tab_count));
+            }
+            Operation::Else => {
+                println!("{}else {{", "\t".repeat(tab_count));
+                print_instruction_code(
+                    instruction.instructions.as_ref().unwrap(),
+                    class,
+                    tab_count + 1,
+                );
+                println!("{}}}", "\t".repeat(tab_count));
+            }
+            Operation::Loop => {
+                println!(
+                    "{}while ({}) {{",
+                    "\t".repeat(tab_count),
+                    instruction.condition.as_ref().unwrap()
+                );
+                print_instruction_code(
+                    instruction.instructions.as_ref().unwrap(),
+                    class,
+                    tab_count + 1,
+                );
+                println!("{}}}", "\t".repeat(tab_count));
+            }
+            Operation::InterfaceCall => todo!(),
+            Operation::Increment => todo!(),
+            Operation::PutField => todo!(),
         }
     }
 }

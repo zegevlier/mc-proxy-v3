@@ -45,21 +45,24 @@ impl Packet {
             todo!("Compression is not implemented yet");
         }
 
-        if self.packet_id.is_none() {
+        if let Some(packet_id) = self.packet_id {
+            let mut packet = Self::new();
+            packet.write_varint(self.get_size()?);
+            packet.write_varint(packet_id);
+            packet.write_bytes(self.data.split());
+
+            Ok(packet.data.freeze())
+        } else {
             bail!("Packet ID is not set");
         }
-
-        let mut packet = Packet::new();
-        packet.write_varint(self.get_size()?);
-        packet.write_varint(self.packet_id.unwrap());
-        packet.write_bytes(self.data.split());
-
-        Ok(packet.data.freeze())
     }
 
     pub fn read_from_bytes(bytes: &mut BytesMut) -> Result<Self> {
         let size = bytes.read_varint()?;
-        let mut packet = Packet::with_capacity(size as usize);
+        if (size as usize) > bytes.len() {
+            bail!("Not enough bytes to read");
+        }
+        let mut packet = Self::with_capacity(size as usize);
         packet.data = bytes.split();
         let packet_id = packet.read_varint()?;
         packet.set_packet_id(packet_id);
@@ -67,7 +70,7 @@ impl Packet {
     }
 }
 
-pub trait PacketReaderWriter {
+pub trait ReaderWriter {
     fn read_boolean(&mut self) -> Result<bool>;
     fn write_boolean(&mut self, value: bool);
 
@@ -138,7 +141,7 @@ pub trait PacketReaderWriter {
     // fn write_varint_array(&mut self, value: Vec<T>, writer: impl Fn(&mut Self, T) -> Result<()>);
 }
 
-impl PacketReaderWriter for BytesMut {
+impl ReaderWriter for BytesMut {
     fn read_boolean(&mut self) -> Result<bool> {
         Ok(self.read_byte()? != 0)
     }
@@ -335,7 +338,7 @@ impl PacketReaderWriter for BytesMut {
     }
 }
 
-impl PacketReaderWriter for Packet {
+impl ReaderWriter for Packet {
     fn read_boolean(&mut self) -> Result<bool> {
         self.data.read_boolean()
     }
@@ -438,14 +441,14 @@ mod varint_test {
     use anyhow::Result;
     use bytes::BytesMut;
 
-    use super::{Packet, PacketReaderWriter};
+    use super::{Packet, ReaderWriter};
 
     impl Packet {
         pub fn data_mut(&mut self) -> &mut BytesMut {
             &mut self.data
         }
 
-        pub fn data(&self) -> &BytesMut {
+        pub const fn data(&self) -> &BytesMut {
             &self.data
         }
     }
