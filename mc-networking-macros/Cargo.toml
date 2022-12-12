@@ -1,0 +1,13 @@
+[package]
+edition = "2021"
+name = "mc-networking-macros"
+version = "0.1.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.47"
+quote = "1.0.21"
+syn = {version = "1.0.105", features = ["fold"]}
+synstructure = "0.12.6"
