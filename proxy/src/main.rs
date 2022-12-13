@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
         protocol_version: Varint::from(754),
         server_host: "play.schoolrp.net".to_string(),
         server_port: 25565,
-        next_state: Varint::from(1),
+        next_state: mc_networking::packets::handshaking::serverbound::handshake::State::Status,
     };
 
     let status_packet = StatusRequest {};

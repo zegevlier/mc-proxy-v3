@@ -1,45 +1,56 @@
-// use proc_macro2::TokenStream;
-// use quote::{quote, quote_spanned};
-// use syn::{
-//     fold::Fold, parse_macro_input, spanned::Spanned, Data, DeriveInput, Fields, ItemStatic, Token,
-//     Visibility,
-// };
+use quote::{quote, quote_spanned, ToTokens};
+use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput};
 
-// // struct Packet;
+#[proc_macro_derive(VarintEnum)]
+pub fn derive_varint_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let variants = match input.data {
+        Data::Enum(data) => data.variants,
+        _ => panic!("VarintEnum can only be derived for enums"),
+    };
 
-// // impl Fold for Packet {
-// //     fn fold_field(&mut self, i: syn::Field) -> syn::Field {
-// //         let mut field = i;
-// //         field.vis = Visibility::Public(syn::VisPublic {
-// //             pub_token: ItemStatic,
-// //         });
-// //         field
-// //     }
-// // }
+    let mut decodes = Vec::new();
+    let mut encodes = Vec::new();
+    let mut i: usize = 0;
+    for variant in variants {
+        if let Some((_, expr)) = variant.clone().discriminant {
+            // This lets the A = 1 syntax work (will yell loudly if it's not a number)
+            let expr = syn::parse2::<syn::Expr>(expr.to_token_stream()).unwrap();
+            let lit = syn::parse2::<syn::Lit>(expr.to_token_stream()).unwrap();
+            let int = syn::parse2::<syn::LitInt>(lit.to_token_stream()).unwrap();
+            let value = int.base10_parse::<usize>().unwrap();
+            i = value;
+        }
+        let ident = variant.ident.clone();
 
-// #[proc_macro]
-// pub fn packet(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-//     let input = parse_macro_input!(input as DeriveInput);
+        let idx = syn::Index::from(i);
+        decodes.push(quote_spanned! {variant.span()=>
+            #idx => Ok(#name::#ident),
+        });
 
-//     let ident = input.ident;
+        encodes.push(quote_spanned! {variant.span()=>
+            #name::#ident => Varint::from(#idx).encode(buf),
+        });
+        i += 1;
+    }
 
-//     let mut fields = quote!();
-//     match input.data {
-//         Data::Struct(ds) => {
-//             for field in ds.fields {
-//                 let name = field.ident;
-//                 let ty = field.ty;
-//                 fields.extend(quote!(pub #name: #ty,));
-//             }
-//         }
-//         Data::Enum(_) | Data::Union(_) => todo!(),
-//     }
+    let expanded = quote! {
+        impl McEncodable for #name {
+            fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+                match Varint::decode(buf)?.value() {
+                    #(#decodes)*
+                    _ => Err(color_eyre::eyre::eyre!("Invalid state")),
+                }
+            }
 
-//     let expanded = quote! {
-//         pub struct #ident {
-//             #fields
-//         }
-//     };
+            fn encode(&self, buf: &mut impl std::io::Write) -> color_eyre::Result<()> {
+                match self {
+                    #(#encodes)*
+                }
+            }
+        }
+    };
 
-//     proc_macro::TokenStream::from(expanded)
-// }
+    proc_macro::TokenStream::from(expanded)
+}

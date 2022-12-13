@@ -1,3 +1,5 @@
+use mc_networking_macros::VarintEnum;
+
 use crate::{
     traits::{McEncodable, Packet},
     types::Varint,
@@ -8,7 +10,13 @@ pub struct Handshake {
     pub protocol_version: Varint,
     pub server_host: String,
     pub server_port: u16,
-    pub next_state: Varint,
+    pub next_state: State,
+}
+
+#[derive(Debug, PartialEq, Eq, VarintEnum)]
+pub enum State {
+    Status = 1,
+    Login,
 }
 
 impl McEncodable for Handshake {
@@ -17,7 +25,7 @@ impl McEncodable for Handshake {
             protocol_version: Varint::decode(buf)?,
             server_host: String::decode(buf)?,
             server_port: u16::decode(buf)?,
-            next_state: Varint::decode(buf)?,
+            next_state: State::decode(buf)?,
         })
     }
 
