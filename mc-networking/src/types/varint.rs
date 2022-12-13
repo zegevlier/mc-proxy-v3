@@ -5,6 +5,22 @@ use std::{
 
 use crate::traits::McEncodable;
 
+pub fn varint_size(value: i32) -> color_eyre::Result<i32> {
+    if value < 0 {
+        color_eyre::eyre::bail!("Varint cannot be negative");
+    } else if value < 0x80 {
+        Ok(1)
+    } else if value < 0x4000 {
+        Ok(2)
+    } else if value < 0x200000 {
+        Ok(3)
+    } else if value < 0x10000000 {
+        Ok(4)
+    } else {
+        Ok(5)
+    }
+}
+
 #[derive(PartialEq, Eq)]
 pub struct Varint {
     value: i32,
@@ -15,7 +31,7 @@ impl Varint {
         Self { value: v }
     }
 
-    pub fn to_value(&self) -> i32 {
+    pub fn value(&self) -> i32 {
         self.value
     }
 }
@@ -33,7 +49,7 @@ impl Debug for Varint {
 }
 
 impl McEncodable for Varint {
-    fn read(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
         let mut num_read = 0;
         let mut result: i32 = 0;
         let mut read: u8;
@@ -55,7 +71,7 @@ impl McEncodable for Varint {
         Ok(Self::from(result))
     }
 
-    fn write(&self, buf: &mut impl std::io::Write) -> color_eyre::Result<()> {
+    fn encode(&self, buf: &mut impl std::io::Write) -> color_eyre::Result<()> {
         let mut value = u32::from_le_bytes(self.value.to_le_bytes());
         loop {
             let mut temp: u8 = (value & 0x7F) as u8;

@@ -1,37 +1,49 @@
 #![warn(clippy::nursery)]
 // #![warn(clippy::unwrap_used, clippy::expect_used)]
 
-use anyhow::Result;
+use std::io::Cursor;
+
 use bytes::{BufMut, BytesMut};
+use color_eyre::eyre::Result;
+use mc_networking::{
+    packets::{
+        handshaking::serverbound::Handshake,
+        status::{clientbound::StatusResponse, serverbound::StatusRequest},
+    },
+    traits::Packet,
+    types::Varint,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::packet::{Packet, ReaderWriter};
-
 mod packet;
-pub(crate) mod utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut handshake_packet = Packet::new();
-    handshake_packet.set_packet_id(0x00);
-    handshake_packet.write_varint(760);
-    handshake_packet.write_string("127.0.0.1".to_string());
-    handshake_packet.write_unsigned_short(25565);
-    handshake_packet.write_varint(1);
+    let handshake_packet = Handshake {
+        protocol_version: Varint::from(754),
+        server_host: "play.schoolrp.net".to_string(),
+        server_port: 25565,
+        next_state: Varint::from(1),
+    };
 
-    let mut status_packet = Packet::new();
-    status_packet.set_packet_id(0x00);
+    let status_packet = StatusRequest {};
 
     let thread = tokio::spawn(async move {
         let mut stream = tokio::net::TcpStream::connect("play.schoolrp.net:25565")
             .await
             .unwrap();
-        let handshake_bytes = handshake_packet.get_packet_bytes(-1).unwrap();
-        let status_bytes = status_packet.get_packet_bytes(-1).unwrap();
 
-        let mut buf = BytesMut::new();
-        buf.put(handshake_bytes);
-        buf.put(status_bytes);
+        let buf = BytesMut::new();
+        let mut writer = buf.clone().writer();
+
+        handshake_packet
+            .write_packet(&mut writer, Default::default())
+            .unwrap();
+        status_packet
+            .write_packet(&mut writer, Default::default())
+            .unwrap();
+
+        let buf = writer.into_inner();
 
         stream.write_all(&buf).await.unwrap();
 
@@ -41,18 +53,15 @@ async fn main() -> Result<()> {
             if read == 0 {
                 break;
             }
-            let mut bytes_read = bytes.clone();
-            if let Ok(mut packet) = Packet::read_from_bytes(&mut bytes_read) {
-                println!("{}", packet.read_string().unwrap());
+            let bytes_vec = bytes.to_vec();
+            let bytes_read = bytes_vec.as_slice();
+            if let Ok(packet) = StatusResponse::read_packet(&mut Cursor::new(bytes_read)) {
+                println!("{}", packet.json_response);
                 break;
             }
         }
 
-        // println!("Returned amount: {}", bytes.len());
-
-        // let mut returned_packet = Packet::read_from_bytes(&mut bytes).unwrap();
-
-        // println!("{}", returned_packet.read_string().unwrap());
+        println!("Returned amount: {}", bytes.len());
     });
 
     thread.await.unwrap();

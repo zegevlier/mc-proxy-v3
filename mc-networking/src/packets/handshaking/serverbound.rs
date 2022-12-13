@@ -1,3 +1,3 @@
-pub mod packet_set_protocol;
+pub mod handshake;
 
-pub use packet_set_protocol::Handshake;
+pub use handshake::Handshake;

@@ -2,6 +2,8 @@ pub mod packets;
 pub mod traits;
 pub mod types;
 
+pub use traits::McEncodable;
+
 #[cfg(test)]
 mod tests {
     use crate::{packets::handshaking::serverbound::Handshake, traits::McEncodable, types::Varint};
@@ -16,10 +18,10 @@ mod tests {
         };
 
         let mut buffer = Vec::new();
-        handshaking_packet.write(&mut buffer).unwrap();
+        handshaking_packet.encode(&mut buffer).unwrap();
 
         let mut cursor = std::io::Cursor::new(buffer.as_slice());
-        let decoded_handshaking_packet = Handshake::read(&mut cursor).unwrap();
+        let decoded_handshaking_packet = Handshake::decode(&mut cursor).unwrap();
 
         assert_eq!(handshaking_packet, decoded_handshaking_packet);
     }
