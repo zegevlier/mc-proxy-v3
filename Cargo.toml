@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "proxy",
-  "codegen",
   "minecraft-data-test",
   "mc-networking",
   "mc-networking-macros",
