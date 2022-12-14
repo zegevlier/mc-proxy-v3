@@ -1,4 +1,4 @@
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Write};
 
 use crate::types::{varint::varint_size, Compression, Varint};
 
@@ -12,12 +12,7 @@ pub trait Packet: Sized + McEncodable {
     fn id(&self) -> i32;
 
     fn read_packet(buf: &mut Cursor<&[u8]>) -> color_eyre::Result<Self> {
-        let length = Varint::decode(buf)?.value() as usize;
-        let id = Varint::decode(buf)?.value();
-        let mut packet_buf = vec![0u8; length - varint_size(id)? as usize];
-        buf.read_exact(&mut packet_buf)?;
-        let mut packet_buf = Cursor::new(packet_buf.as_slice());
-        Self::decode(&mut packet_buf)
+        Self::decode(buf)
     }
 
     fn write_packet(

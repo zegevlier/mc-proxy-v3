@@ -1,9 +1,7 @@
 #![warn(clippy::nursery)]
-// #![warn(clippy::unwrap_used, clippy::expect_used)]
 
 use std::io::Cursor;
 
-use bytes::{BufMut, BytesMut};
 use color_eyre::eyre::Result;
 use mc_networking::{
     packets::{
@@ -12,10 +10,9 @@ use mc_networking::{
     },
     traits::Packet,
     types::Varint,
+    McEncodable,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-mod packet;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,35 +30,38 @@ async fn main() -> Result<()> {
             .await
             .unwrap();
 
-        let buf = BytesMut::new();
-        let mut writer = buf.clone().writer();
+        let mut buf = Vec::new();
 
         handshake_packet
-            .write_packet(&mut writer, Default::default())
+            .write_packet(&mut buf, Default::default())
             .unwrap();
         status_packet
-            .write_packet(&mut writer, Default::default())
+            .write_packet(&mut buf, Default::default())
             .unwrap();
-
-        let buf = writer.into_inner();
 
         stream.write_all(&buf).await.unwrap();
 
-        let mut bytes = BytesMut::new();
+        let mut bytes = Vec::new();
         loop {
             let read = stream.read_buf(&mut bytes).await.unwrap();
             if read == 0 {
                 break;
             }
-            let bytes_vec = bytes.to_vec();
-            let bytes_read = bytes_vec.as_slice();
-            if let Ok(packet) = StatusResponse::read_packet(&mut Cursor::new(bytes_read)) {
-                println!("{}", packet.json_response);
-                break;
+            let bytes_read = bytes.as_slice();
+            let mut cursor = Cursor::new(bytes_read);
+            if let Ok(length) = Varint::decode(&mut cursor) {
+                let length = length.value() as usize;
+                if (length as usize) > bytes_read.len() {
+                    continue;
+                }
+                let id = Varint::decode(&mut cursor).unwrap().value();
+                assert_eq!(id, 0x00);
+                if let Ok(packet) = StatusResponse::read_packet(&mut cursor) {
+                    println!("{}", packet.json_response);
+                    break;
+                }
             }
         }
-
-        println!("Returned amount: {}", bytes.len());
     });
 
     thread.await.unwrap();

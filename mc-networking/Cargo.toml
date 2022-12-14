@@ -7,4 +7,4 @@ version = "0.1.0"
 
 [dependencies]
 color-eyre = "0.6.2"
-mc-networking-macros = {path = "../mc-networking-macros"}
+mc-networking-macros = {path = "./mc-networking-macros"}

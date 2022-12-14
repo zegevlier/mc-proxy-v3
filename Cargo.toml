@@ -3,5 +3,4 @@ members = [
   "proxy",
   "minecraft-data-test",
   "mc-networking",
-  "mc-networking-macros",
 ]
