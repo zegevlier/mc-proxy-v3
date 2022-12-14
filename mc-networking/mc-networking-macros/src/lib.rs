@@ -96,3 +96,56 @@ pub fn derive_mcencodable_struct(input: proc_macro::TokenStream) -> proc_macro::
 
     proc_macro::TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(Version)]
+pub fn derive_version_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let variants = match input.data {
+        Data::Enum(data) => data.variants,
+        _ => panic!("Version can only be derived for enums"),
+    };
+
+    let mut to_ids = Vec::new();
+    let mut from_ids = Vec::new();
+    for variant in variants {
+        let value = match variant.clone().discriminant {
+            Some((_, expr)) => {
+                // This lets the A = 1 syntax work (will yell loudly if it's not a number)
+                let expr = syn::parse2::<syn::Expr>(expr.to_token_stream()).unwrap();
+                let lit = syn::parse2::<syn::Lit>(expr.to_token_stream()).unwrap();
+                let int = syn::parse2::<syn::LitInt>(lit.to_token_stream()).unwrap();
+                int.base10_parse::<i32>().unwrap()
+            }
+            _ => panic!("Version enum variants must have discriminants"),
+        };
+
+        let ident = variant.ident.clone();
+
+        to_ids.push(quote_spanned! {variant.span()=>
+            #name::#ident => Some(#value),
+        });
+        from_ids.push(quote_spanned! {variant.span()=>
+            #value => Some(#name::#ident),
+        });
+    }
+
+    let expanded = quote! {
+        impl #name {
+            pub fn from_id(id: i32) -> Option<Self> {
+                match id {
+                    #(#from_ids)*
+                    _ => None,
+                }
+            }
+
+            pub fn to_id(&self) -> Option<i32> {
+                match self {
+                    #(#to_ids)*
+                }
+            }
+        }
+    };
+
+    proc_macro::TokenStream::from(expanded)
+}

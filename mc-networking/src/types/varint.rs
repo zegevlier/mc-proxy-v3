@@ -48,6 +48,18 @@ impl Debug for Varint {
     }
 }
 
+impl From<i32> for Varint {
+    fn from(v: i32) -> Self {
+        Self::from(v)
+    }
+}
+
+impl From<Varint> for i32 {
+    fn from(v: Varint) -> Self {
+        v.value
+    }
+}
+
 impl McEncodable for Varint {
     fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
         let mut num_read = 0;

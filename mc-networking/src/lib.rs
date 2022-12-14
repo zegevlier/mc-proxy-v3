@@ -1,6 +1,7 @@
 pub mod packets;
 pub mod traits;
 pub mod types;
+pub mod versions;
 
 pub use traits::McEncodable;
 

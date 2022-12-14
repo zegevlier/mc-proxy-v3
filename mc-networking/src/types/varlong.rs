@@ -15,6 +15,7 @@ impl Varlong {
         Self { value: v }
     }
 
+    #[allow(dead_code)]
     pub fn value(&self) -> i64 {
         self.value
     }

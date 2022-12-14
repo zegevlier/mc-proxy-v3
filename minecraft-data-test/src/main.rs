@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 use convert_case::{Case, Casing};
 use minecraft_data_rs::{
     api::{versions_by_minecraft_version, Api},
