@@ -54,3 +54,45 @@ pub fn derive_varint_enum(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
     proc_macro::TokenStream::from(expanded)
 }
+
+#[proc_macro_derive(McEncodable)]
+pub fn derive_mcencodable_struct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let fields = match input.data {
+        Data::Struct(data) => data.fields,
+        _ => panic!("VarintEnum can only be derived for enums"),
+    };
+
+    let mut decodes = Vec::new();
+    let mut encodes = Vec::new();
+    for field in fields {
+        let ident = field.clone().ident.unwrap();
+        decodes.push(quote_spanned! {field.span()=>
+            #ident: McEncodable::decode(buf)?,
+        });
+
+        encodes.push(quote_spanned! {field.span()=>
+            self.#ident.encode(buf)?;
+        });
+    }
+
+    let expanded = quote! {
+        use crate::traits::McEncodable;
+
+        impl McEncodable for #name {
+            fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+                Ok(Self {
+                    #(#decodes)*
+                })
+            }
+
+            fn encode(&self, buf: &mut impl std::io::Write) -> color_eyre::Result<()> {
+                #(#encodes)*
+                Ok(())
+            }
+        }
+    };
+
+    proc_macro::TokenStream::from(expanded)
+}

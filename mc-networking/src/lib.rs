@@ -4,6 +4,8 @@ pub mod types;
 
 pub use traits::McEncodable;
 
+pub use mc_networking_macros as derive;
+
 #[cfg(test)]
 mod tests {
     // use crate::{packets::handshaking::serverbound::Handshake, traits::McEncodable, types::Varint};

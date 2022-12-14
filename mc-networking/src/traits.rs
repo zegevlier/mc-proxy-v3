@@ -35,3 +35,14 @@ pub trait Packet: Sized + McEncodable {
         Ok(())
     }
 }
+
+#[macro_export]
+macro_rules! packet {
+    ($name:ident, $id: expr) => {
+        impl $crate::traits::Packet for $name {
+            fn id(&self) -> i32 {
+                $id
+            }
+        }
+    };
+}
