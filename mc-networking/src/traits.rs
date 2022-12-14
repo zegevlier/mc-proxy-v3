@@ -1,6 +1,6 @@
 use std::io::{Cursor, Write};
 
-use crate::types::{varint::varint_size, Compression, Varint};
+use crate::types::{varint_size, Compression, Varint};
 
 pub trait McEncodable: Sized {
     fn decode(buf: &mut Cursor<&[u8]>) -> color_eyre::Result<Self>;
