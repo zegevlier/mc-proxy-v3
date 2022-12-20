@@ -1,12 +1,6 @@
-use mc_networking::versions::Version;
+use mc_networking::{types::State, versions::Version};
 
-pub enum State {
-    Handshaking,
-    Status,
-    Login,
-    Play,
-}
-
+#[derive(Debug, Clone, Copy)]
 pub struct ConnInfo {
     pub state: State,
     pub protocol_version: Option<Version>,

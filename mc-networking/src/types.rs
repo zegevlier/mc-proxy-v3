@@ -22,3 +22,17 @@ impl Default for Compression {
         Self { threshold: -1 }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum State {
+    Handshaking,
+    Status,
+    Login,
+    Play,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Direction {
+    Clientbound,
+    Serverbound,
+}

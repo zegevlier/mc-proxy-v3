@@ -1,102 +1,160 @@
 #![warn(clippy::nursery)]
 
-use std::{fmt::format, io::Cursor};
+use std::{io::Cursor, sync::Arc};
 
 use color_eyre::eyre::Result;
 use mc_networking::{
     packets::{
-        handshaking::serverbound::Handshake,
-        status::{clientbound::{StatusResponse, PingResponse}, serverbound::{StatusRequest, PingRequest}},
+        decode_packet,
+        handshaking::{self, HandshakingPacket, ServerboundHandshakingPacket},
+        status::{
+            clientbound::{PingResponse, StatusResponse},
+            ServerboundStatusPacket, StatusPacket,
+        },
+        Packets,
     },
-    traits::Packet,
-    types::{Varint, varint_size},
+    traits::PacketEncoder,
+    types::{varint_size, Direction, State, Varint},
     versions::Version,
     McEncodable,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
 };
 
-mod state;
-use state::{ConnInfo, State};
+use crate::state::ConnInfo;
 
-async fn process_socket(mut socket: TcpStream) -> Result<()> {
+mod state;
+
+async fn process_socket(socket: TcpStream) -> Result<()> {
     // do work with socket here
 
-    let mut buf = Vec::new();
+    let (c_tx, mut c_rx): (Sender<Packets>, Receiver<Packets>) = mpsc::channel(1024);
 
-    let mut conn_info = ConnInfo::default();
+    let (mut rx, mut tx) = socket.into_split();
 
-    loop {
-        let read = socket.read_buf(&mut buf).await?;
-        if read == 0 {
-            println!("No bytes read, closing connection");
-            break;
-        }
+    let conn_info = Arc::from(Mutex::from(ConnInfo::default()));
 
-        let bytes_read = buf.as_slice();
-        let mut cursor = Cursor::new(bytes_read);
+    let mut handles = Vec::new();
 
-        if let Ok(length) = Varint::decode(&mut cursor) {
-            let length = length.value() as usize;
-            if (length as usize) > bytes_read.len() {
-                continue;
+    handles.push(tokio::spawn(async move {
+        let mut buf = Vec::new();
+        loop {
+            let read = rx.read_buf(&mut buf).await.unwrap();
+            if read == 0 {
+                println!("No bytes read, closing connection");
+                break;
             }
-            
-            let bytes = buf.drain(..(length + varint_size(length as i32)? as usize));
-            let mut cursor = Cursor::new(&bytes.as_slice()[bytes.len()-length..]);
-            let id = Varint::decode(&mut cursor).unwrap().value();
-            println!("id: {}", id);
-            match conn_info.state {
-                State::Handshaking => {
-                    assert_eq!(id, 0x00);
-                    if let Ok(packet) = Handshake::read_packet(&mut cursor) {
-                        println!("{:?}", packet);
-                        conn_info.protocol_version =
-                            Version::from_id(packet.protocol_version.into());
-                        match packet.next_state {
-                        mc_networking::packets::handshaking::serverbound::handshake::State::Status => {
-                            conn_info.state = State::Status;
-                        }
-                        mc_networking::packets::handshaking::serverbound::handshake::State::Login => {
-                            conn_info.state = State::Login;                            
-                        }
+
+            loop {
+                let bytes_read = buf.as_slice();
+                let mut cursor = Cursor::new(&bytes_read);
+
+                if let Ok(length) = Varint::decode(&mut cursor) {
+                    let length = length.value() as usize;
+                    if (length as usize) > bytes_read.len() {
+                        println!("Length is greater than bytes read");
+                        break;
                     }
-                    }
-                }
-                State::Status => {
-                    match id {
-                        0x00 =>
-                            if let Ok(packet) = StatusRequest::read_packet(&mut cursor) {
-                                println!("{:?}", packet);
-                                let status_packet = StatusResponse {
-                                    json_response: format!(
-                                        "{{\"version\":{{\"name\":\"1.19.2\",\"protocol\":{}}},\"players\":{{\"max\":1,\"online\":0,\"sample\":[]}},\"description\":{{\"text\":\"Proxy\"}}}}", 
-                                        conn_info.protocol_version.map_or(-1, |version| version.to_id().unwrap())),
-                                };
-                                println!("{}", &status_packet.json_response);
-                                let mut buf = Vec::new();
-                                status_packet.write_packet(&mut buf, Default::default())?;
-                                socket.write_all(&buf).await?;
+
+                    let bytes = buf.drain(..(length + varint_size(length as i32).unwrap() as usize));
+                    let mut cursor = Cursor::new(&bytes.as_slice()[bytes.len() - length..]);
+                    let id = Varint::decode(&mut cursor).unwrap().value();
+
+                    let conn_info_l = conn_info.lock().await;
+                    let packet =
+                        match decode_packet(conn_info_l.state, Direction::Serverbound, id, &mut cursor)
+                        {
+                            Ok(packet) => packet,
+                            Err(e) => {
+                                println!("Error decoding packet: {}", e);
+                                continue;
                             }
-                        0x01 => if let Ok(packet) = PingRequest::read_packet(&mut cursor) {
-                            println!("{:?}", packet);
-                            let status_packet = PingResponse {
-                                payload: packet.payload,
-                            };
-                            let mut buf = Vec::new();
-                            status_packet.write_packet(&mut buf, Default::default())?;
-                            socket.write_all(&buf).await?;
+                        };
+                    dbg!(&packet);
+                    drop(conn_info_l);
+                    match packet {
+                        Packets::Handshaking(handshaking_packet) => match handshaking_packet {
+                            HandshakingPacket::Serverbound(serverbound_packet) => {
+                                match serverbound_packet {
+                                    ServerboundHandshakingPacket::Handshake(handshake) => {
+                                        let mut conn_info = conn_info.lock().await;
+                                        conn_info.protocol_version =
+                                            Version::from_id(handshake.protocol_version.into());
+                                        conn_info.state = match handshake.next_state {
+                                            handshaking::serverbound::handshake::State::Status => {
+                                                State::Status
+                                            }
+                                            handshaking::serverbound::handshake::State::Login => {
+                                                State::Login
+                                            }
+                                        };
+                                    }
+                                }
+                            }
+                            _ => panic!("Unexpected packet"),
                         },
-                        _ => unreachable!()
+                        Packets::Status(status_packet) => match status_packet {
+                            StatusPacket::Serverbound(serverbound_status_packet) => {
+                                match serverbound_status_packet {
+                                    ServerboundStatusPacket::StatusRequest(_packet) => {
+                                        let conn_info = conn_info.lock().await;
+                                        let status_response_packet = StatusResponse {
+                                            json_response: format!("{{\"version\":{{\"name\":\"1.19.2\",\"protocol\":{}}},\"players\":{{\"max\":1,\"online\":0,\"sample\":[]}},\"description\":{{\"text\":\"Proxy\"}}}}",
+                                                                    conn_info.protocol_version.map_or(-1, |version| version.to_id().unwrap())),
+                                        };
+                                        c_tx.send(Packets::Status(StatusPacket::Clientbound(
+                                            mc_networking::packets::status::ClientboundStatusPacket::StatusResponse(
+                                                status_response_packet,
+                                            ),
+                                        ))).await.unwrap();
+                                    },
+                                    ServerboundStatusPacket::PingRequest(packet) => {
+                                        c_tx.send(Packets::Status(StatusPacket::Clientbound(
+                                            mc_networking::packets::status::ClientboundStatusPacket::PingResponse(
+                                                PingResponse {
+                                                    payload: packet.payload,
+                                                }
+                                            ),
+                                        ))).await.unwrap();
+                                    },
+                                }
+                            }
+                            _ => panic!("Unexpected packet"),
+                        },
                     }
-                },
-                State::Login => todo!(),
-                State::Play => todo!(),
+                } else {
+                    break;
+                }
             }
         }
+    }));
+
+    handles.push(tokio::spawn(async move {
+        loop {
+            let packet = match c_rx.recv().await {
+                Some(packet) => packet,
+                None => {
+                    println!("Finished sending packets to the client");
+                    break;
+                }
+            };
+            dbg!(&packet);
+            let mut buf = Vec::new();
+            packet.write_packet(&mut buf, Default::default()).unwrap();
+            tx.write_all(&buf).await.unwrap();
+        }
+    }));
+
+    for handle in handles {
+        handle.await.unwrap();
     }
+
     println!("Connection closed");
     Ok(())
 }
@@ -113,57 +171,6 @@ async fn main() -> Result<()> {
             if let Err(e) = process_socket(socket).await {
                 eprintln!("Error: {}", e);
             }
-            println!("process_socket finished");
         });
     }
-
-    // let handshake_packet = Handshake {
-    //     protocol_version: Varint::from(754),
-    //     server_host: "play.schoolrp.net".to_string(),
-    //     server_port: 25565,
-    //     next_state: mc_networking::packets::handshaking::serverbound::handshake::State::Status,
-    // };
-
-    // let status_packet = StatusRequest {};
-
-    // let thread = tokio::spawn(async move {
-    //     let mut stream = tokio::net::TcpStream::connect("play.schoolrp.net:25565")
-    //         .await
-    //         .unwrap();
-
-    //     let mut buf = Vec::new();
-
-    //     handshake_packet
-    //         .write_packet(&mut buf, Default::default())
-    //         .unwrap();
-    //     status_packet
-    //         .write_packet(&mut buf, Default::default())
-    //         .unwrap();
-
-    //     stream.write_all(&buf).await.unwrap();
-
-    //     let mut bytes = Vec::new();
-    //     loop {
-    //         let read = stream.read_buf(&mut bytes).await.unwrap();
-    //         if read == 0 {
-    //             break;
-    //         }
-    //         let bytes_read = bytes.as_slice();
-    //         let mut cursor = Cursor::new(bytes_read);
-    //         if let Ok(length) = Varint::decode(&mut cursor) {
-    //             let length = length.value() as usize;
-    //             if (length as usize) > bytes_read.len() {
-    //                 continue;
-    //             }
-    //             let id = Varint::decode(&mut cursor).unwrap().value();
-    //             assert_eq!(id, 0x00);
-    //             if let Ok(packet) = StatusResponse::read_packet(&mut cursor) {
-    //                 println!("{}", packet.json_response);
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // });
-
-    // thread.await.unwrap();
 }

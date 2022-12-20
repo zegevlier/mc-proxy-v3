@@ -21,7 +21,7 @@ pub fn varint_size(value: i32) -> color_eyre::Result<i32> {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct Varint {
     value: i32,
 }
@@ -61,7 +61,7 @@ impl From<Varint> for i32 {
 }
 
 impl McEncodable for Varint {
-    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self> {
         let mut num_read = 0;
         let mut result: i32 = 0;
         let mut read: u8;

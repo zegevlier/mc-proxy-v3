@@ -1,10 +1,12 @@
+use std::io::Read;
+
 use crate::traits::McEncodable;
 
 impl<T> McEncodable for Option<T>
 where
     T: McEncodable,
 {
-    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self> {
         match bool::decode(buf)? {
             true => Ok(Some(T::decode(buf)?)),
             false => Ok(None),

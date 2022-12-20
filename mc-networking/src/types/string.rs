@@ -5,7 +5,7 @@ use crate::traits::McEncodable;
 use super::Varint;
 
 impl McEncodable for String {
-    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self> {
         let length = crate::types::Varint::decode(buf)?.value() as usize;
         let mut byte_buf = vec![0u8; length];
         buf.read_exact(&mut byte_buf)?;

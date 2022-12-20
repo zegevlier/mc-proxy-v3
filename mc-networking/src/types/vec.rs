@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::traits::McEncodable;
 
 use super::Varint;
@@ -6,7 +8,7 @@ impl<T> McEncodable for Vec<T>
 where
     T: McEncodable,
 {
-    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self> {
         let length = crate::types::Varint::decode(buf)?.value() as usize;
         let mut vec = Vec::new();
         for _ in 0..length {

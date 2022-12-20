@@ -1,17 +1,17 @@
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 
 use crate::types::{varint_size, Compression, Varint};
 
 pub trait McEncodable: Sized {
-    fn decode(buf: &mut Cursor<&[u8]>) -> color_eyre::Result<Self>;
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self>;
     fn encode(&self, buf: &mut impl Write) -> color_eyre::Result<()>;
 }
 
-pub trait Packet: Sized + McEncodable {
+pub trait Packet: McEncodable {
     // TODO: Add verison parameter
     fn id(&self) -> i32;
 
-    fn read_packet(buf: &mut Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn read_packet(buf: &mut impl Read) -> color_eyre::Result<Self> {
         Self::decode(buf)
     }
 
@@ -29,6 +29,14 @@ pub trait Packet: Sized + McEncodable {
         buf.write_all(&packet_buf)?;
         Ok(())
     }
+}
+
+pub trait PacketEncoder {
+    fn write_packet(
+        &self,
+        buf: &mut impl Write,
+        compression: Compression,
+    ) -> color_eyre::Result<()>;
 }
 
 #[macro_export]

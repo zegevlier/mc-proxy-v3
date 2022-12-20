@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    io::Read,
+};
 
 use crate::traits::McEncodable;
 
@@ -30,7 +33,7 @@ impl Debug for Chat {
 }
 
 impl McEncodable for Chat {
-    fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+    fn decode(buf: &mut impl Read) -> color_eyre::Result<Self> {
         String::decode(buf).map(Self::from)
     }
 

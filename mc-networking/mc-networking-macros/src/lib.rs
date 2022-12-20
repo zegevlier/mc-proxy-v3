@@ -37,7 +37,7 @@ pub fn derive_varint_enum(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
     let expanded = quote! {
         impl McEncodable for #name {
-            fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+            fn decode(buf: &mut impl std::io::Read) -> color_eyre::Result<Self> {
                 match Varint::decode(buf)?.value() {
                     #(#decodes)*
                     _ => Err(color_eyre::eyre::eyre!("Invalid state")),
@@ -81,7 +81,7 @@ pub fn derive_mcencodable_struct(input: proc_macro::TokenStream) -> proc_macro::
         use crate::traits::McEncodable;
 
         impl McEncodable for #name {
-            fn decode(buf: &mut std::io::Cursor<&[u8]>) -> color_eyre::Result<Self> {
+            fn decode(buf: &mut impl std::io::Read) -> color_eyre::Result<Self> {
                 Ok(Self {
                     #(#decodes)*
                 })
@@ -143,6 +143,38 @@ pub fn derive_version_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
                 match self {
                     #(#to_ids)*
                 }
+            }
+        }
+    };
+
+    proc_macro::TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(PacketEncoder)]
+pub fn derive_packet_encoder_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let variants = match input.data {
+        Data::Enum(data) => data.variants,
+        _ => panic!("Version can only be derived for enums"),
+    };
+
+    let mut values = Vec::new();
+    for variant in variants {
+        let ident = variant.ident.clone();
+
+        values.push(quote_spanned! {variant.span()=>
+            Self::#ident(packet) => packet.write_packet(buf, compression)?,
+        });
+    }
+
+    let expanded = quote! {
+        impl crate::traits::PacketEncoder for #name {
+            fn write_packet(&self, buf: &mut impl std::io::Write, compression: crate::types::Compression) -> Result<()> {
+                match self {
+                    #(#values)*
+                }
+                Ok(())
             }
         }
     };
