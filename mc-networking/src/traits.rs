@@ -31,14 +31,6 @@ pub trait Packet: McEncodable {
     }
 }
 
-pub trait PacketEncoder {
-    fn write_packet(
-        &self,
-        buf: &mut impl Write,
-        compression: Compression,
-    ) -> color_eyre::Result<()>;
-}
-
 #[macro_export]
 macro_rules! packet {
     ($name:ident, $id: expr) => {

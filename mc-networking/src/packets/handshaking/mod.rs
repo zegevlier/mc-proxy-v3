@@ -4,7 +4,7 @@ use color_eyre::{eyre::bail, Result};
 use mc_networking_macros::PacketEncoder;
 
 use crate::{
-    traits::{Packet, PacketEncoder},
+    traits::Packet,
     types::{Compression, Direction},
     McEncodable,
 };
@@ -23,7 +23,7 @@ pub enum HandshakingPacket {
 #[derive(Debug)]
 pub enum ClientboundHandshakingPacket {}
 
-impl PacketEncoder for ClientboundHandshakingPacket {
+impl ClientboundHandshakingPacket {
     fn write_packet(&self, _buf: &mut impl Write, _compression: Compression) -> Result<()> {
         bail!("There are no clientbound packets in the handshaking state");
     }

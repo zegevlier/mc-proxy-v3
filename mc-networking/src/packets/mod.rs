@@ -2,10 +2,7 @@ use std::io::{Read, Write};
 
 use color_eyre::Result;
 
-use crate::{
-    traits::PacketEncoder,
-    types::{Compression, Direction, State},
-};
+use crate::types::{Compression, Direction, State};
 
 pub mod handshaking;
 pub mod status;
@@ -16,8 +13,8 @@ pub enum Packets {
     Status(status::StatusPacket),
 }
 
-impl PacketEncoder for Packets {
-    fn write_packet(&self, buf: &mut impl Write, compression: Compression) -> Result<()> {
+impl Packets {
+    pub fn write_packet(&self, buf: &mut impl Write, compression: Compression) -> Result<()> {
         match self {
             Packets::Handshaking(packet) => packet.write_packet(buf, compression)?,
             Packets::Status(packet) => packet.write_packet(buf, compression)?,

@@ -13,7 +13,6 @@ use mc_networking::{
         },
         Packets,
     },
-    traits::PacketEncoder,
     types::{varint_size, Direction, State, Varint},
     versions::Version,
     McEncodable,

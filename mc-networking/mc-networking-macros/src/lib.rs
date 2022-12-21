@@ -169,8 +169,8 @@ pub fn derive_packet_encoder_enum(input: proc_macro::TokenStream) -> proc_macro:
     }
 
     let expanded = quote! {
-        impl crate::traits::PacketEncoder for #name {
-            fn write_packet(&self, buf: &mut impl std::io::Write, compression: crate::types::Compression) -> Result<()> {
+        impl #name {
+            pub(crate) fn write_packet(&self, buf: &mut impl std::io::Write, compression: crate::types::Compression) -> Result<()> {
                 match self {
                     #(#values)*
                 }
