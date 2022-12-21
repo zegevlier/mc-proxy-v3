@@ -6,14 +6,14 @@ use color_eyre::eyre::Result;
 use mc_networking::{
     packets::{
         decode_packet,
-        handshaking::{self, HandshakingPacket, ServerboundHandshakingPacket},
+        handshaking::{HandshakingPacket, ServerboundHandshakingPacket},
         status::{
             clientbound::{PingResponse, StatusResponse},
             ServerboundStatusPacket, StatusPacket,
         },
         Packets,
     },
-    types::{varint_size, Direction, State, Varint},
+    types::{varint_size, Direction, Varint},
     versions::Version,
     McEncodable,
 };
@@ -120,10 +120,7 @@ async fn handle_packet(packet: Packets, conn_info: &Arc<Mutex<ConnInfo>>, c_tx: 
                     let mut conn_info = conn_info.lock().await;
                     conn_info.protocol_version =
                         Version::from_id(handshake.protocol_version.into());
-                    conn_info.state = match handshake.next_state {
-                        handshaking::serverbound::handshake::State::Status => State::Status,
-                        handshaking::serverbound::handshake::State::Login => State::Login,
-                    };
+                    conn_info.state = handshake.next_state.into();
                 }
             },
             _ => panic!("Unexpected packet"),

@@ -1,5 +1,17 @@
-pub mod ping_response;
-pub mod status_response;
+use mc_networking_macros::McEncodable;
 
-pub use ping_response::PingResponse;
-pub use status_response::StatusResponse;
+use crate::packet;
+
+#[derive(Debug, PartialEq, Eq, McEncodable)]
+pub struct StatusResponse {
+    pub json_response: String,
+}
+
+packet!(StatusResponse, 0x00);
+
+#[derive(Debug, PartialEq, Eq, McEncodable)]
+pub struct PingResponse {
+    pub payload: i64,
+}
+
+packet!(PingResponse, 0x01);

@@ -1,5 +1,13 @@
-pub mod ping_request;
-pub mod status_request;
+use crate::{derive::McEncodable, packet};
 
-pub use ping_request::PingRequest;
-pub use status_request::StatusRequest;
+#[derive(Debug, PartialEq, Eq, McEncodable)]
+pub struct StatusRequest {}
+
+packet!(StatusRequest, 0x00);
+
+#[derive(Debug, PartialEq, Eq, McEncodable)]
+pub struct PingRequest {
+    pub payload: i64,
+}
+
+packet!(PingRequest, 0x01);

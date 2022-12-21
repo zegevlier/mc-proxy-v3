@@ -36,7 +36,7 @@ pub fn derive_varint_enum(input: proc_macro::TokenStream) -> proc_macro::TokenSt
     }
 
     let expanded = quote! {
-        impl McEncodable for #name {
+        impl crate::traits::McEncodable for #name {
             fn decode(buf: &mut impl std::io::Read) -> color_eyre::Result<Self> {
                 match Varint::decode(buf)?.value() {
                     #(#decodes)*
@@ -69,7 +69,7 @@ pub fn derive_mcencodable_struct(input: proc_macro::TokenStream) -> proc_macro::
     for field in fields {
         let ident = field.clone().ident.unwrap();
         decodes.push(quote_spanned! {field.span()=>
-            #ident: McEncodable::decode(buf)?,
+            #ident: crate::traits::McEncodable::decode(buf)?,
         });
 
         encodes.push(quote_spanned! {field.span()=>
@@ -78,9 +78,7 @@ pub fn derive_mcencodable_struct(input: proc_macro::TokenStream) -> proc_macro::
     }
 
     let expanded = quote! {
-        use crate::traits::McEncodable;
-
-        impl McEncodable for #name {
+        impl crate::traits::McEncodable for #name {
             fn decode(buf: &mut impl std::io::Read) -> color_eyre::Result<Self> {
                 Ok(Self {
                     #(#decodes)*
