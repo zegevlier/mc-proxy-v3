@@ -4,6 +4,8 @@ use color_eyre::Result;
 
 use crate::types::{Compression, Direction, State};
 
+use self::{handshaking::HandshakingPacket, status::StatusPacket};
+
 pub mod handshaking;
 pub mod status;
 
@@ -31,11 +33,11 @@ pub fn decode_packet(
 ) -> Result<Packets> {
     Ok(match state {
         State::Handshaking => {
-            let packet = handshaking::decode_handshaking_packet(direction, packet_id, buf)?;
+            let packet = HandshakingPacket::decode_packet(direction, packet_id, buf)?;
             Packets::Handshaking(packet)
         }
         State::Status => {
-            let packet = status::decode_status_packet(direction, packet_id, buf)?;
+            let packet = StatusPacket::decode_packet(direction, packet_id, buf)?;
             Packets::Status(packet)
         }
         _ => unimplemented!(),

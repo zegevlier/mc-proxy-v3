@@ -149,35 +149,3 @@ pub fn derive_version_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
 
     proc_macro::TokenStream::from(expanded)
 }
-
-#[proc_macro_derive(PacketEncoder)]
-pub fn derive_packet_encoder_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
-    let variants = match input.data {
-        Data::Enum(data) => data.variants,
-        _ => panic!("Version can only be derived for enums"),
-    };
-
-    let mut values = Vec::new();
-    for variant in variants {
-        let ident = variant.ident.clone();
-
-        values.push(quote_spanned! {variant.span()=>
-            Self::#ident(packet) => packet.write_packet(buf, compression)?,
-        });
-    }
-
-    let expanded = quote! {
-        impl #name {
-            pub(crate) fn write_packet(&self, buf: &mut impl std::io::Write, compression: crate::types::Compression) -> Result<()> {
-                match self {
-                    #(#values)*
-                }
-                Ok(())
-            }
-        }
-    };
-
-    proc_macro::TokenStream::from(expanded)
-}

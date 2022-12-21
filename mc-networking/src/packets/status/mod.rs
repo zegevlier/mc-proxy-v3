@@ -1,9 +1,4 @@
-use std::io::Read;
-
-use color_eyre::{eyre::bail, Result};
-use mc_networking_macros::PacketEncoder;
-
-use crate::{traits::Packet, types::Direction, McEncodable};
+use crate::packets;
 
 use self::{
     clientbound::{PingResponse, StatusResponse},
@@ -13,45 +8,15 @@ use self::{
 pub mod clientbound;
 pub mod serverbound;
 
-#[derive(Debug, PacketEncoder)]
-pub enum StatusPacket {
-    Clientbound(ClientboundStatusPacket),
-    Serverbound(ServerboundStatusPacket),
-}
-#[derive(Debug, PacketEncoder)]
-pub enum ClientboundStatusPacket {
-    StatusResponse(StatusResponse),
-    PingResponse(PingResponse),
-}
-
-#[derive(Debug, PacketEncoder)]
-pub enum ServerboundStatusPacket {
-    StatusRequest(StatusRequest),
-    PingRequest(PingRequest),
-}
-
-pub fn decode_status_packet(
-    direction: Direction,
-    packet_id: i32,
-    buf: &mut impl Read,
-) -> Result<StatusPacket> {
-    Ok(match direction {
-        Direction::Clientbound => {
-            let packet = match packet_id {
-                0 => ClientboundStatusPacket::StatusResponse(StatusResponse::decode(buf)?),
-                1 => ClientboundStatusPacket::PingResponse(PingResponse::decode(buf)?),
-                _ => bail!("Unknown packet id: {}", packet_id),
-            };
-            #[allow(unreachable_code)]
-            StatusPacket::Clientbound(packet)
+packets! {
+    StatusPacket {
+        ClientboundStatusPacket {
+            0x00 -> StatusResponse(StatusResponse),
+            0x01 -> PingResponse(PingResponse)
         }
-        Direction::Serverbound => {
-            let packet = match packet_id {
-                0 => ServerboundStatusPacket::StatusRequest(StatusRequest::decode(buf)?),
-                1 => ServerboundStatusPacket::PingRequest(PingRequest::decode(buf)?),
-                _ => bail!("Unknown packet id: {}", packet_id),
-            };
-            StatusPacket::Serverbound(packet)
+        ServerboundStatusPacket {
+            0x00 -> StatusRequest(StatusRequest),
+            0x01 -> PingRequest(PingRequest)
         }
-    })
+    }
 }
