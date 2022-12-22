@@ -2,7 +2,10 @@ use std::io::{Read, Write};
 
 use color_eyre::Result;
 
-use crate::types::{Compression, Direction, State};
+use crate::{
+    types::{Compression, Direction, State},
+    versions::Version,
+};
 
 use self::{handshaking::HandshakingPacket, status::StatusPacket};
 
@@ -29,15 +32,16 @@ pub fn decode_packet(
     state: State,
     direction: Direction,
     packet_id: i32,
+    version: Version,
     buf: &mut impl Read,
 ) -> Result<Packets> {
     Ok(match state {
         State::Handshaking => {
-            let packet = HandshakingPacket::decode_packet(direction, packet_id, buf)?;
+            let packet = HandshakingPacket::decode_packet(direction, packet_id, version, buf)?;
             Packets::Handshaking(packet)
         }
         State::Status => {
-            let packet = StatusPacket::decode_packet(direction, packet_id, buf)?;
+            let packet = StatusPacket::decode_packet(direction, packet_id, version, buf)?;
             Packets::Status(packet)
         }
         _ => unimplemented!(),

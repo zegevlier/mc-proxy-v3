@@ -10,7 +10,10 @@ packets! {
         ClientboundHandshakingPacket {
         }
         ServerboundHandshakingPacket {
-            0x00 -> Handshake(Handshake)
+            Handshake,
+            @0x00 => {
+                -1..=761 => Handshake,
+            }
         }
     }
 }

@@ -72,15 +72,25 @@ async fn process_socket(socket: TcpStream) -> Result<()> {
                 let id = Varint::decode(&mut cursor).unwrap().value();
 
                 let conn_info_l = conn_info.lock().await;
-                let packet =
-                    match decode_packet(conn_info_l.state, Direction::Serverbound, id, &mut cursor)
+                let packet = match decode_packet(
+                    conn_info_l.state,
+                    Direction::Serverbound,
+                    id,
                     {
-                        Ok(packet) => packet,
-                        Err(e) => {
-                            println!("Error decoding packet: {}", e);
-                            continue;
+                        if conn_info_l.protocol_version.is_none() {
+                            Version::Unknown
+                        } else {
+                            conn_info_l.protocol_version.unwrap()
                         }
-                    };
+                    },
+                    &mut cursor,
+                ) {
+                    Ok(packet) => packet,
+                    Err(e) => {
+                        println!("Error decoding packet: {}", e);
+                        continue;
+                    }
+                };
                 dbg!(&packet);
                 drop(conn_info_l);
                 handle_packet(packet, &conn_info, &c_tx).await;
@@ -133,7 +143,7 @@ async fn handle_packet(packet: Packets, conn_info: &Arc<Mutex<ConnInfo>>, c_tx: 
                             let conn_info = conn_info.lock().await;
                             let status_response_packet = StatusResponse {
                             json_response: format!("{{\"version\":{{\"name\":\"1.19.2\",\"protocol\":{}}},\"players\":{{\"max\":1,\"online\":0,\"sample\":[]}},\"description\":{{\"text\":\"Proxy\"}}}}",
-                                                    conn_info.protocol_version.map_or(-1, |version| version.to_id().unwrap())),
+                                                    conn_info.protocol_version.map_or(-1, |version| version.to_id())),
                         };
                             c_tx.send(Packets::Status(StatusPacket::Clientbound(
                             mc_networking::packets::status::ClientboundStatusPacket::StatusResponse(

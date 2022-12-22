@@ -121,7 +121,7 @@ pub fn derive_version_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         let ident = variant.ident.clone();
 
         to_ids.push(quote_spanned! {variant.span()=>
-            #name::#ident => Some(#value),
+            #name::#ident => #value,
         });
         from_ids.push(quote_spanned! {variant.span()=>
             #value => Some(#name::#ident),
@@ -137,7 +137,7 @@ pub fn derive_version_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
                 }
             }
 
-            pub fn to_id(&self) -> Option<i32> {
+            pub fn to_id(&self) -> i32 {
                 match self {
                     #(#to_ids)*
                 }

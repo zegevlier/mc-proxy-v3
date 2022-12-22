@@ -11,12 +11,24 @@ pub mod serverbound;
 packets! {
     StatusPacket {
         ClientboundStatusPacket {
-            0x00 -> StatusResponse(StatusResponse),
-            0x01 -> PingResponse(PingResponse)
+            StatusResponse,
+            PingResponse,
+            @0x00 => {
+                0..=761 => StatusResponse,
+            }
+            @0x01 => {
+                0..=761 => PingResponse,
+            }
         }
         ServerboundStatusPacket {
-            0x00 -> StatusRequest(StatusRequest),
-            0x01 -> PingRequest(PingRequest)
+            StatusRequest,
+            PingRequest,
+            @0x00 => {
+                0..=761 => StatusRequest,
+            }
+            @0x01 => {
+                0..=761 => PingRequest,
+            }
         }
     }
 }
