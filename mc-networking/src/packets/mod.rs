@@ -7,15 +7,15 @@ use crate::{
     versions::Version,
 };
 
-use self::{handshaking::HandshakingPacket, status::StatusPacket};
-
 pub mod handshaking;
+pub mod login;
 pub mod status;
 
 #[derive(Debug)]
 pub enum Packets {
     Handshaking(handshaking::HandshakingPacket),
     Status(status::StatusPacket),
+    Login(login::LoginPacket),
 }
 
 impl Packets {
@@ -28,6 +28,7 @@ impl Packets {
         match self {
             Packets::Handshaking(packet) => packet.write_packet(buf, version, compression)?,
             Packets::Status(packet) => packet.write_packet(buf, version, compression)?,
+            Packets::Login(packet) => packet.write_packet(buf, version, compression)?,
         }
         Ok(())
     }
@@ -42,12 +43,17 @@ pub fn decode_packet(
 ) -> Result<Packets> {
     Ok(match state {
         State::Handshaking => {
-            let packet = HandshakingPacket::decode_packet(direction, packet_id, version, buf)?;
+            let packet =
+                handshaking::HandshakingPacket::decode_packet(direction, packet_id, version, buf)?;
             Packets::Handshaking(packet)
         }
         State::Status => {
-            let packet = StatusPacket::decode_packet(direction, packet_id, version, buf)?;
+            let packet = status::StatusPacket::decode_packet(direction, packet_id, version, buf)?;
             Packets::Status(packet)
+        }
+        State::Login => {
+            let packet = login::LoginPacket::decode_packet(direction, packet_id, version, buf)?;
+            Packets::Login(packet)
         }
         _ => unimplemented!(),
     })

@@ -7,6 +7,7 @@ use mc_networking::{
     packets::{
         decode_packet,
         handshaking::{HandshakingPacket, ServerboundHandshakingPacket},
+        login::{LoginPacket, ServerboundLoginPacket},
         status::{
             clientbound::{PingResponse, StatusResponse},
             ServerboundStatusPacket, StatusPacket,
@@ -58,7 +59,6 @@ async fn process_socket(socket: TcpStream) -> Result<()> {
 
                 let length = Varint::decode(&mut cursor);
                 if length.is_err() {
-                    println!("Error decoding length");
                     break;
                 }
 
@@ -170,6 +170,15 @@ async fn handle_packet(packet: Packets, conn_info: &Arc<Mutex<ConnInfo>>, c_tx: 
                 _ => panic!("Unexpected packet"),
             }
         }
+        Packets::Login(login_packet) => match login_packet {
+            LoginPacket::Serverbound(serverbound_login_packet) => match serverbound_login_packet {
+                ServerboundLoginPacket::LoginStart(packet) => {
+                    println!("Username: {}", packet.username);
+                    println!("Uuid: {:?}", packet.uuid);
+                }
+            },
+            _ => panic!("Unexpected packet"),
+        },
     }
 }
 

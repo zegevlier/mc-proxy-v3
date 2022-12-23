@@ -4,12 +4,14 @@ mod identifier;
 mod nums;
 mod option;
 mod string;
+mod uuid;
 mod varint;
 mod varlong;
 mod vec;
 
 pub use chat::Chat;
 pub use identifier::Identifier;
+pub use uuid::Uuid;
 pub use varint::varint_size;
 pub use varint::Varint;
 
