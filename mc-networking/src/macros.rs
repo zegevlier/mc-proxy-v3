@@ -1,4 +1,38 @@
 #[macro_export]
+macro_rules! _one_side {
+    ($bound:ident {
+        $($name:ident {
+            $($version:pat => $id:literal),*
+        }),*
+    }) => {
+        #[derive(Debug)]
+        pub enum $bound {
+            $($name($name)),*
+        }
+
+        impl $bound {
+            #[allow(unused_variables, unreachable_code, unreachable_patterns)]
+            pub(crate) fn write_packet(&self, buf: &mut impl std::io::Write, version: $crate::versions::Version, compression: $crate::types::Compression) -> color_eyre::Result<()> {
+                match self {
+                    $($bound::$name(packet) => packet.write_packet(buf, version, compression)?,)*
+                    _ => color_eyre::eyre::bail!("Unexpected packet: {:?}", self),
+                }
+                Ok(())
+            }
+        }
+
+        $(impl $crate::traits::Packet for $name {
+            fn id(version: $crate::versions::Version) -> Option<i32> {
+                match version.to_id() {
+                    $($version => Some($id),)*
+                    _ => None,
+                }
+            }
+        })*
+    };
+}
+
+#[macro_export]
 macro_rules! packets {
     ($packet:ident {
         $clientbound:ident {
@@ -42,52 +76,19 @@ macro_rules! packets {
             }
         }
 
-        #[derive(Debug)]
-        pub enum $clientbound {
-            $($c_name($c_name)),*
-        }
-
-        impl $clientbound {
-            #[allow(unused_variables, unreachable_code, unreachable_patterns)]
-            pub(crate) fn write_packet(&self, buf: &mut impl std::io::Write, version: $crate::versions::Version, compression: $crate::types::Compression) -> color_eyre::Result<()> {
-                match self {
-                    $($clientbound::$c_name(packet) => packet.write_packet(buf, version, compression)?,)*
-                    _ => color_eyre::eyre::bail!("Unexpected packet: {:?}", self),
-                }
-                Ok(())
+        $crate::_one_side! {
+            $clientbound {
+                $($c_name {
+                    $($c_version1 => $c_id1),*
+                }),*
             }
         }
 
-        #[derive(Debug)]
-        pub enum $serverbound {
-            $($s_name($s_name)),*
-        }
-
-        $(impl $crate::traits::Packet for $c_name {
-            fn id(version: $crate::versions::Version) -> Option<i32> {
-                match version.to_id() {
-                    $($c_version1 => Some($c_id1),)*
-                    _ => None,
-                }
-            }
-        })*
-
-        $(impl $crate::traits::Packet for $s_name {
-            fn id(version: $crate::versions::Version) -> Option<i32> {
-                match version.to_id() {
-                    $($s_version1 => Some($s_id1),)*
-                    _ => None,
-                }
-            }
-        })*
-
-        impl $serverbound {
-            pub(crate) fn write_packet(&self, buf: &mut impl std::io::Write, version: $crate::versions::Version, compression: $crate::types::Compression) -> color_eyre::Result<()> {
-                match self {
-                    $($serverbound::$s_name(packet) => packet.write_packet(buf, version, compression)?),*
-                    // _ => color_eyre::eyre::bail!("Unexpected packet: {:?}", self),
-                }
-                Ok(())
+        $crate::_one_side! {
+            $serverbound {
+                $($s_name {
+                    $($s_version1 => $s_id1),*
+                }),*
             }
         }
 
