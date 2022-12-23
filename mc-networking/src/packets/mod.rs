@@ -19,10 +19,15 @@ pub enum Packets {
 }
 
 impl Packets {
-    pub fn write_packet(&self, buf: &mut impl Write, compression: Compression) -> Result<()> {
+    pub fn write_packet(
+        &self,
+        buf: &mut impl Write,
+        version: Version,
+        compression: Compression,
+    ) -> Result<()> {
         match self {
-            Packets::Handshaking(packet) => packet.write_packet(buf, compression)?,
-            Packets::Status(packet) => packet.write_packet(buf, compression)?,
+            Packets::Handshaking(packet) => packet.write_packet(buf, version, compression)?,
+            Packets::Status(packet) => packet.write_packet(buf, version, compression)?,
         }
         Ok(())
     }

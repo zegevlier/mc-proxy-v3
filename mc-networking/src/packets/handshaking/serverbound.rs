@@ -1,6 +1,5 @@
 use crate::{
     derive::{McEncodable, VarintEnum},
-    packet,
     types::Varint,
 };
 
@@ -26,5 +25,3 @@ impl From<State> for crate::types::State {
         }
     }
 }
-
-packet!(Handshake, 0x00);

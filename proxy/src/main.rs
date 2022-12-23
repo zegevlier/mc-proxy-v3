@@ -41,7 +41,9 @@ async fn process_socket(socket: TcpStream) -> Result<()> {
 
     let mut handles = Vec::new();
 
+    let conn_info_clone = conn_info.clone();
     handles.push(tokio::spawn(async move {
+        let conn_info = conn_info_clone;
         let mut buf = Vec::new();
         loop {
             let read = rx.read_buf(&mut buf).await.unwrap();
@@ -76,13 +78,7 @@ async fn process_socket(socket: TcpStream) -> Result<()> {
                     conn_info_l.state,
                     Direction::Serverbound,
                     id,
-                    {
-                        if conn_info_l.protocol_version.is_none() {
-                            Version::Unknown
-                        } else {
-                            conn_info_l.protocol_version.unwrap()
-                        }
-                    },
+                    conn_info_l.protocol_version,
                     &mut cursor,
                 ) {
                     Ok(packet) => packet,
@@ -109,7 +105,11 @@ async fn process_socket(socket: TcpStream) -> Result<()> {
             };
             dbg!(&packet);
             let mut buf = Vec::new();
-            packet.write_packet(&mut buf, Default::default()).unwrap();
+            let conn_info = conn_info.lock().await;
+            packet
+                .write_packet(&mut buf, conn_info.protocol_version, Default::default())
+                .unwrap();
+            drop(conn_info);
             tx.write_all(&buf).await.unwrap();
         }
     }));
@@ -128,8 +128,13 @@ async fn handle_packet(packet: Packets, conn_info: &Arc<Mutex<ConnInfo>>, c_tx: 
             HandshakingPacket::Serverbound(serverbound_packet) => match serverbound_packet {
                 ServerboundHandshakingPacket::Handshake(handshake) => {
                     let mut conn_info = conn_info.lock().await;
-                    conn_info.protocol_version =
-                        Version::from_id(handshake.protocol_version.into());
+                    match Version::from_id(handshake.protocol_version.into()) {
+                        Some(version) => conn_info.protocol_version = version,
+                        None => {
+                            println!("Unsupported protocol version, closing connection");
+                            return;
+                        }
+                    }
                     conn_info.state = handshake.next_state.into();
                 }
             },
@@ -143,7 +148,7 @@ async fn handle_packet(packet: Packets, conn_info: &Arc<Mutex<ConnInfo>>, c_tx: 
                             let conn_info = conn_info.lock().await;
                             let status_response_packet = StatusResponse {
                             json_response: format!("{{\"version\":{{\"name\":\"1.19.2\",\"protocol\":{}}},\"players\":{{\"max\":1,\"online\":0,\"sample\":[]}},\"description\":{{\"text\":\"Proxy\"}}}}",
-                                                    conn_info.protocol_version.map_or(-1, |version| version.to_id())),
+                                                    conn_info.protocol_version.to_id())
                         };
                             c_tx.send(Packets::Status(StatusPacket::Clientbound(
                             mc_networking::packets::status::ClientboundStatusPacket::StatusResponse(

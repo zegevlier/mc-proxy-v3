@@ -1,4 +1,4 @@
-use crate::packets;
+use crate::{packet, packets};
 
 use self::{
     clientbound::{PingResponse, StatusResponse},
@@ -7,6 +7,20 @@ use self::{
 
 pub mod clientbound;
 pub mod serverbound;
+
+packet!(StatusResponse, {
+    0..=761 => 0x00,
+});
+packet!(PingResponse, {
+    0..=761 => 0x01,
+});
+
+packet!(StatusRequest, {
+    0..=761 => 0x00,
+});
+packet!(PingRequest, {
+    0..=761 => 0x01,
+});
 
 packets! {
     StatusPacket {
